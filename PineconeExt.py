@@ -1,8 +1,8 @@
 from pinecone import ServerlessSpec
 from pinecone.exceptions import PineconeException
 
-API_KEY = "pcsk_2MQACG_ThnZW3UXCXRLTYsDvep2LpqERNKpsFXQQnyhh9uRJmvQG73TnY1TFxS2QyJauUm"
-HF_TOKEN = "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"
+API_KEY = ""
+HF_TOKEN = ""
 ENV = "us-east-1"
 
 def create_index(pclient, name, dim, metric = "cosine"):
