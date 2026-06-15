@@ -1,8 +1,6 @@
 from pinecone import ServerlessSpec
 from pinecone.exceptions import PineconeException
 
-API_KEY = ""
-HF_TOKEN = ""
 ENV = "us-east-1"
 
 def create_index(pclient, name, dim, metric = "cosine"):
@@ -60,3 +58,14 @@ def print_namespaces(idx_pointer):
     for page in idx_pointer.list_namespaces():
         for ns in page.namespaces:
             print(ns.name, ns.record_count)
+
+def delete_index(pclient, dbname):
+    pclient.delete_index(dbname)
+
+def delete_all_records(idx_pointer, namespace = "default"):
+    if(idx_pointer.describe_index_stats().total_vector_count > 0):
+        if(namespace == "default"):
+            idx_pointer.delete(delete_all=True)
+        else:
+            idx_pointer.delete(delete_all=True, namespace=namespace)
+
