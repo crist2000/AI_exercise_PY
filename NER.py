@@ -6,6 +6,21 @@ import torch
 import PineconeExt as pcEx
 import os
 import Constants as Const
+import pandas as pd
+import tools as tools
+
+def prepare_BERT_dataframe(model, df, numrows):
+        df["values"]=df["title"].map(lambda x: (model.encode(x)).tolist())
+        df["id"] = tools.make_ids(numrows)
+        df["metadata"] = df.apply(lambda x:
+            {
+              "category": x["category"],
+              "subtitle": x["subtitle"]
+            }, axis=1)
+
+        df_upsert=df[["id","values","metadata"]]
+        return df_upsert
+
 
 os.environ["HF_TOKEN"] = Const.HF_TOKEN
 

@@ -1,48 +1,53 @@
 from pprint import pprint
 
 from pinecone import Pinecone
+from datasets import load_dataset
 from pinecone.exceptions import PineconeException
+import DataFrameHelper as DfHelper
 import PineconeExt as pcEx
-import pandas as pd
+#import pandas as pd
 import tools
-from sentence_transformers import SentenceTransformer
 import Constants as Const
+from transformers import AutoTokenizer, AutoModelForTokenClassification, AutoConfig
+from transformers import pipeline
+from tqdm.auto import tqdm
+import ModelFacade as model
 
-from tools import make_ids
-
-dataset_file = "C:\\Work\\medium_post_titles.csv"
-dataset_file_10 = "C:\\Work\\medium_post_titles_10.csv"
 db_name="testdb1"
 dn_name_ctx = "testdb-ctx"
 
+model_id = "dslim/bert-base-NER"
+tokenizer = AutoTokenizer.from_pretrained(Const.bert_path)#or model_id
+config = AutoConfig.from_pretrained(Const.bert_path)#or model_id. not needed when connected to HF.
+model_ner = AutoModelForTokenClassification.from_pretrained(Const.bert_path)#or model_id
+
+##One time action to download this staff from HF to local drive for offline use.
+#tokenizer.save_pretrained("C:\\Work")
+#config.save_pretrained("C:\\Work")
+#model_ner.save_pretrained("C:\\Work")
+
+# #NLP pipeline
+nlp = pipeline( "ner", model=model_ner, tokenizer=tokenizer, aggregation_strategy = "max", device="cpu")
+
 try:
-    df = pd.read_csv(dataset_file_10, nrows=10)
-    # #print(df.isna().sum()) #isna() shows how many NULL values grouped by each column
-    df.dropna(inplace=True)
-    numrows = df["title"].count()
-    #
-    # #df selects False values from subtitle_truncated_flag column. ~ means NOT in pandas(literally  meaning> select which IS NOT True).
-    # df = df[~df["subtitle_truncated_flag"]]
-    # print(f"Number of unique categories:{df["category"].nunique()}")
+    df = DfHelper.pd.read_csv(Const.medium_articles_10)
+    df_batch_size = 5
 
+    mpnet_base_v2 = model.ModelFacade("all-mpnet-base-v2")
+    retriever = mpnet_base_v2.get_transformer()
 
-    model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2', token=Const.HF_TOKEN )
-    df["values"]=df["title"].map(lambda x: (model.encode(x)).tolist())
-    df["id"] = make_ids(numrows)
-    df["metadata"] = df.apply(lambda x:
-        {
-          "category": x["category"],
-          "subtitle": x["subtitle"]
-        }, axis=1)
-
-    df_upsert=df[["id","values","metadata"]]
+    df["values"], df["entities"] = DfHelper.get_entitiesANDembeddings(df["text_truncated"], retriever, nlp)
+    df["metadata"] = df[["title","authors","tags","entities"]].to_dict("records")
+    df["id"] = tools.make_ids(10)
 
     pc = Pinecone(api_key=Const.API_KEY)
-    idx_pointer = pc.Index(name=db_name)
-    pcEx.delete_all_records(idx_pointer)
+    idx_ptr = pc.Index(name=db_name)
+    pcEx.delete_all_records(idx_ptr)
 
-    idx_pointer.upsert_from_dataframe(df_upsert)
-
+    for i in (range(0, len(df), df_batch_size)):
+        print(f"{i} {i+df_batch_size}")
+        df_upsert = df[["id", "values", "metadata"]].iloc[i:i + df_batch_size]
+        idx_ptr.upsert_from_dataframe(df_upsert)
 
 except PineconeException as e:
     # Handle Pinecone-specific errors
@@ -50,7 +55,6 @@ except PineconeException as e:
 except Exception as e:
     # Handle other errors
     print(f"Unexpected error: {e}")
-
 
 
 
